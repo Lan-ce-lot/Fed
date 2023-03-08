@@ -170,6 +170,8 @@ class Server(object):
         ids = [c.id for c in self.clients]
 
         return ids, num_samples, tot_correct, tot_auc
+    # def test_generic_metric(self, dataset, model):
+
 
     def train_metrics(self):
         num_samples = []

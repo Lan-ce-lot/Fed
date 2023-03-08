@@ -1,3 +1,5 @@
+import copy
+
 import torch
 import argparse
 import os
@@ -7,8 +9,13 @@ import numpy as np
 import torchvision
 import logging
 
+from torch import nn
+
 from algorithms.server.serverFedavg import FedAvg
+from algorithms.server.serverFedbn import FedBN
+from algorithms.server.serverFedrod import FedROD
 from models.LeNet import LeNet
+from models.model import LocalModel
 from options import args_parser
 
 logger = logging.getLogger()
@@ -44,6 +51,13 @@ def run(args):
         # select algorithm
         if args.algorithm == "FedAvg":
             server = FedAvg(args, i)
+        elif args.algorithm == "FedROD":
+            args.head = copy.deepcopy(args.model.fc)
+            args.model.fc = nn.Identity()
+            args.model = LocalModel(args.model, args.head)
+            server = FedROD(args, i)
+        elif args.algorithm == "FedBN":
+            server = FedBN(args, i)
 
 
         else:
