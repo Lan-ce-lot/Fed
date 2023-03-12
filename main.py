@@ -1,5 +1,6 @@
 import copy
 
+import parser
 import torch
 import argparse
 import os
@@ -14,8 +15,8 @@ from torch import nn
 from algorithms.server.serverFedavg import FedAvg
 from algorithms.server.serverFedbn import FedBN
 from algorithms.server.serverFedrod import FedROD
-from models.LeNet import LeNet
-from models.model import LocalModel
+from models.LeNet import LeNet, DigitModel
+from models.model import LocalModel, ClientModel
 from options import args_parser
 
 logger = logging.getLogger()
@@ -46,24 +47,36 @@ def run(args):
         if model_str == "cnn":
             if args.dataset[:5] == "mnist" or args.dataset == "fmnist":
                 args.model = LeNet().to(args.device)
+            elif args.dataset == "digits":
+                args.model = DigitModel().to(args.device)
         print(args.model)
 
         # select algorithm
         if args.algorithm == "FedAvg":
             server = FedAvg(args, i)
         elif args.algorithm == "FedROD":
-            args.head = copy.deepcopy(args.model.fc)
+            head = copy.deepcopy(args.model.fc)
             args.model.fc = nn.Identity()
-            args.model = LocalModel(args.model, args.head)
+            args.model = LocalModel(args.model, head)
             server = FedROD(args, i)
         elif args.algorithm == "FedBN":
-            server = FedBN(args, i)
 
+            server = FedBN(args, i)
+        elif args.algorithm == "Fed":
+            args.g_fea = copy.deepcopy(args.model.fc1)
+            args.p_fea = copy.deepcopy(args.model.fc1)
+            args.head = copy.deepcopy(args.model.fc)
+            args.model.fc1 = nn.Identity()
+            args.model.fc = nn.Identity()
+            args.model = ClientModel(args.model, args.g_fea, args.p_fea, args.head)
+            server = FedROD(args, i)
 
         else:
             raise NotImplementedError
-
-        server.train()
+        if args.algorithm == "FedBN":
+            server.train_bn()
+        else:
+            server.train()
 
         time_list.append(time.time() - start)
 
