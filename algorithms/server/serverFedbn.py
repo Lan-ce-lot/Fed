@@ -6,6 +6,7 @@ import numpy as np
 
 from algorithms.client.clientFedbn import clientFedbn
 from algorithms.server.server import Server
+from dataset.cifar100 import prepare_data_cifar100
 from dataset.digits import prepare_data
 
 
@@ -13,12 +14,26 @@ class FedBN(Server):
     def __init__(self, args, times):
         super().__init__(args, times)
 
-        self.set_clients_digits(args, clientFedbn)
+        self.set_clients_cifar100(args, clientFedbn)
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
 
         # self.load_model()
+
+    def set_clients_cifar100(self, args, clientObj):
+        train_loaders, test_loaders = prepare_data_cifar100(args)
+        for i in range(args.num_clients):
+            train_data_loader = train_loaders[i]
+            test_data_loader = test_loaders[i]
+            client = clientObj(args,
+                               id=i,
+                               train_samples=len(train_data_loader),
+                               test_samples=len(test_data_loader),
+                               train_loader=train_data_loader,
+                               test_loader=test_data_loader,
+                              )
+            self.clients.append(client)
 
     def set_clients_digits(self, args, clientObj):
         train_loaders, test_loaders = prepare_data(args)
@@ -37,7 +52,8 @@ class FedBN(Server):
                                train_samples=len(train_data_loader),
                                test_samples=len(test_data_loader),
                                train_loader=train_data_loader,
-                               test_loader=test_data_loader
+                               test_loader=test_data_loader,
+                               data_name=datasets[i]
                               )
             self.clients.append(client)
 

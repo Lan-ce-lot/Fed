@@ -12,11 +12,13 @@ from algorithms.client.client import Client
 class clientFedbn(Client):
     def __init__(self, args, id, train_samples, test_samples, **kwargs):
         super().__init__(args, id, train_samples, test_samples, **kwargs)
-
+        self.id = id
         self.loss = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
+        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate, weight_decay=1e-5, momentum=0.9)
         self.train_loader = kwargs['train_loader']
         self.test_loader = kwargs['test_loader']
+        if args.dataset == "digits":
+            self.data_name = kwargs['data_name']
 
     def train_bn(self):
         trainloader = self.train_loader
@@ -48,7 +50,7 @@ class clientFedbn(Client):
     def train_metrics(self):
         train_loader = self.train_loader
         self.model.eval()
-
+        train_acc = 0
         train_num = 0
         loss = 0
         for x, y in train_loader:
@@ -58,10 +60,12 @@ class clientFedbn(Client):
                 x = x.to(self.device)
             y = y.to(self.device)
             output = self.model(x)
+            train_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
             train_num += y.shape[0]
             loss += self.loss(output, y).item() * y.shape[0]
 
-
+        print(self.id, "_trainLoss:", loss * 1.0 / train_num, end=' ')
+        print(self.id, "_trainAcc:", train_acc * 1.0 / train_num)
         return loss, train_num
     def test_metrics(self):
         test_loader_full = self.test_loader
@@ -95,7 +99,7 @@ class clientFedbn(Client):
         y_true = np.concatenate(y_true, axis=0)
 
         auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
-
+        print(self.id, "_testAcc:", test_acc * 1.0 / test_num)
         return test_acc, test_num, auc
 
     def train(self):

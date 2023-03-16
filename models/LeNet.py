@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -48,39 +50,52 @@ class DigitModel(nn.Module):
     Model for benchmark experiment on Digits.
     """
 
-    def __init__(self, num_classes=10, **kwargs):
+    def __init__(self, num_classes=10, dim=6272, **kwargs):
         super(DigitModel, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, 5, 1, 2)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.conv2 = nn.Conv2d(64, 64, 5, 1, 2)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.conv3 = nn.Conv2d(64, 128, 5, 1, 2)
-        self.bn3 = nn.BatchNorm2d(128)
+        self.conv1 = nn.Sequential(
+            OrderedDict([
+                ('conv1', nn.Conv2d(3, 64, 5, 1, 2)),
+                ('bn1', nn.BatchNorm2d(64)),
+                ('relu1', nn.ReLU(inplace=True)),
+                ('maxpool1',nn.MaxPool2d(kernel_size=2))
+            ])
+        )
+        self.conv2 = nn.Sequential(
+            OrderedDict([
+                ('conv2', nn.Conv2d(64, 64, 5, 1, 2)),
+                ('bn2', nn.BatchNorm2d(64)),
+                ('relu2', nn.ReLU(inplace=True)),
+                ('maxpool2', nn.MaxPool2d(kernel_size=2))
+            ])
+        )
+        self.conv3 = nn.Sequential(
+            OrderedDict([
+                ('conv3', nn.Conv2d(64, 128, 5, 1, 2)),
+                ('bn3', nn.BatchNorm2d(128)),
+                ('relu3', nn.ReLU(inplace=True)),
+            ])
+        )
+        self.fc1 = nn.Sequential(
+            OrderedDict([
+                ('fc1', nn.Linear(dim, 2048)),
+                ('bn4', nn.BatchNorm1d(2048)),
+                ('relu4', nn.ReLU(inplace=True)),
 
-        self.fc1 = nn.Linear(6272, 2048)
-        self.bn4 = nn.BatchNorm1d(2048)
-        self.fc2 = nn.Linear(2048, 512)
-        self.bn5 = nn.BatchNorm1d(512)
-        self.fc3 = nn.Linear(512, num_classes)
+                ('fc2', nn.Linear(2048, 512)),
+                ('bn5', nn.BatchNorm1d(512)),
+                ('relu5', nn.ReLU(inplace=True)),
+            ])
+        )
+        self.fc = nn.Linear(512, num_classes)
 
     def forward(self, x):
-        x = func.relu(self.bn1(self.conv1(x)))
-        x = func.max_pool2d(x, 2)
+        out = self.conv1(x)
+        out = self.conv2(out)
+        out = self.conv3(out)
+        out = out.view(out.shape[0], -1)
+        out = self.fc1(out)
+        out = self.fc(out)
 
-        x = func.relu(self.bn2(self.conv2(x)))
-        x = func.max_pool2d(x, 2)
+        return out
 
-        x = func.relu(self.bn3(self.conv3(x)))
 
-        x = x.view(x.shape[0], -1)
-
-        x = self.fc1(x)
-        x = self.bn4(x)
-        x = func.relu(x)
-
-        x = self.fc2(x)
-        x = self.bn5(x)
-        x = func.relu(x)
-
-        x = self.fc3(x)
-        return x

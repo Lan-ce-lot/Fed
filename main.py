@@ -1,4 +1,5 @@
 import copy
+import random
 
 import parser
 import torch
@@ -12,18 +13,19 @@ import logging
 
 from torch import nn
 
+from algorithms.server.serverFed import FedOurs
 from algorithms.server.serverFedavg import FedAvg
 from algorithms.server.serverFedbn import FedBN
 from algorithms.server.serverFedrod import FedROD
 from models.LeNet import LeNet, DigitModel
-from models.model import LocalModel, ClientModel
+from models.model import LocalModel, ClientOurModel
 from options import args_parser
 
 logger = logging.getLogger()
 logger.setLevel(logging.ERROR)
 
 warnings.simplefilter("ignore")
-torch.manual_seed(0)
+# torch.manual_seed(0)
 
 # hyper-params for Text tasks
 vocab_size = 98635
@@ -49,6 +51,8 @@ def run(args):
                 args.model = LeNet().to(args.device)
             elif args.dataset == "digits":
                 args.model = DigitModel().to(args.device)
+            elif args.dataset[:5] == "Cifar":
+                args.model = DigitModel(num_classes=args.num_classes, dim=8192).to(args.device)
         print(args.model)
 
         # select algorithm
@@ -60,20 +64,18 @@ def run(args):
             args.model = LocalModel(args.model, head)
             server = FedROD(args, i)
         elif args.algorithm == "FedBN":
-
             server = FedBN(args, i)
         elif args.algorithm == "Fed":
-            args.g_fea = copy.deepcopy(args.model.fc1)
-            args.p_fea = copy.deepcopy(args.model.fc1)
+            g_fea = copy.deepcopy(args.model.fc1)
             args.head = copy.deepcopy(args.model.fc)
             args.model.fc1 = nn.Identity()
             args.model.fc = nn.Identity()
-            args.model = ClientModel(args.model, args.g_fea, args.p_fea, args.head)
-            server = FedROD(args, i)
+            args.model = ClientOurModel(args.model, g_fea, args.head)
+            server = FedOurs(args, i)
 
         else:
             raise NotImplementedError
-        if args.algorithm == "FedBN":
+        if args.algorithm == "FedAvg":
             server.train_bn()
         else:
             server.train()
@@ -98,6 +100,13 @@ if __name__ == "__main__":
     total_start = time.time()
 
     args = args_parser()
+
+    seed = args.seed
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.device_id
 

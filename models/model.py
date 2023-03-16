@@ -15,6 +15,19 @@ class LocalModel(nn.Module):
 
         return out
 
+class ClientOurModel(nn.Module):
+    def __init__(self, base, g_fea, head):
+        super(ClientOurModel, self).__init__()
+
+        self.base = base
+        self.g_fea = g_fea
+        self.head = head
+    def forward(self, x):
+        out = self.base(x)
+        gout = self.g_fea(out)
+        out = gout.detach()
+        out = self.head(out)
+        return out
 
 class ClientModel(nn.Module):
     def __init__(self, base, g_fea, p_fea, head):

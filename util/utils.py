@@ -1,14 +1,21 @@
+import random
+
 import numpy as np
 
+# Initialize the random seeds
+import torch
 
-def generate_projection_matrix(num_tasks, feature_dim=256, share_dims=0, qr=True):
+np.random.seed(0)
+random.seed(0)
+def generate_projection_matrix(num_client, feature_dim=256, share_dims=0, qr=True):
     """
     Project features (v) to subspace parametrized by A:
 
     Returns: A.(A^T.A)^-1.A^T
     """
-    rank = (feature_dim - share_dims) / num_tasks
-    assert num_tasks * rank <= (feature_dim - share_dims), "Feature dimension should be less than num_tasks * rank"
+    rank = (feature_dim - share_dims) / num_client
+    rank = int(rank)
+    assert num_client * rank <= (feature_dim - share_dims), "Feature dimension should be less than num_tasks * rank"
 
     # Generate ONBs
     if qr:
@@ -19,8 +26,8 @@ def generate_projection_matrix(num_tasks, feature_dim=256, share_dims=0, qr=True
         print('Generating ONBs from Identity matrix')
         q = np.identity(feature_dim)
     projections = []
-
-    for tt in range(num_tasks):
+    # print(q)
+    for tt in range(num_client):
         offset = tt * rank
         A = np.concatenate((q[:, offset:offset + rank], q[:, feature_dim - share_dims:]), axis=1)
         proj = np.matmul(A, np.transpose(A))
@@ -43,3 +50,10 @@ def unit_test_projection_matrices(projection_matrices):
     for i in range(num_matrices):
         for j in range(num_matrices):
             print('P{}.P{}={}'.format(i, j, np.dot(projections[i], projections[j])))
+
+if __name__ == '__main__':
+    projections = generate_projection_matrix(num_client=6, feature_dim=512, qr=False)
+    unit_test_projection_matrices(projections)
+    a=torch.randn(32,512)
+    b=torch.mm(a,torch.Tensor(projections[0]))
+    print(b.shape)
