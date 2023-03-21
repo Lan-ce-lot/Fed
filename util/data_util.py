@@ -4,6 +4,8 @@ import torch
 
 
 def read_data(dataset, idx, is_train=True):
+    if dataset == "Cifar":
+        dataset = 'cifar100FL/cifar20'
     if is_train:
         train_data_dir = os.path.join('./dataset', dataset, 'train/')
 

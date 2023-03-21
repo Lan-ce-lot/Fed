@@ -54,6 +54,6 @@ def unit_test_projection_matrices(projection_matrices):
 if __name__ == '__main__':
     projections = generate_projection_matrix(num_client=6, feature_dim=512, qr=False)
     unit_test_projection_matrices(projections)
-    a=torch.randn(32,512)
-    b=torch.mm(a,torch.Tensor(projections[0]))
-    print(b.shape)
+    # a=torch.randn(32,512)
+    # b=torch.mm(a,torch.Tensor(projections[0]))
+    # print(b.shape)

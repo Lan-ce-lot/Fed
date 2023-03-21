@@ -5,7 +5,8 @@ from threading import Thread
 from algorithms.client.clientFedavg import clientFedavg
 from algorithms.server.server import Server
 from dataset.cifar100 import prepare_data_cifar100
-from dataset.digits import prepare_data
+from dataset.digits import prepare_data_digits
+from dataset.office_caltech_10 import prepare_data_office
 
 
 class FedAvg(Server):
@@ -14,10 +15,10 @@ class FedAvg(Server):
 
         # select slow clients
         # self.set_slow_clients()
-        if args.dataset == 'digits':
-            self.set_clients_digits(args, clientObj=clientFedavg)
-        elif args.dataset == 'Cifar':
-            self.set_clients_cifar100(args, clientObj=clientFedavg)
+        if args.dataset == 'digits' or args.dataset == 'office':
+            self.set_clients_bn(args, clientObj=clientFedavg)
+        # elif args.dataset == 'Cifar':
+        #     self.set_clients_cifar100(args, clientObj=clientFedavg)
         else:
             self.set_clients(args, clientObj=clientFedavg)
 
@@ -40,11 +41,14 @@ class FedAvg(Server):
                               )
             self.clients.append(client)
 
-    def set_clients_digits(self, args, clientObj):
-        train_loaders, test_loaders = prepare_data(args)
-
-        # name of each client dataset
-        datasets = ['MNIST', 'SVHN', 'USPS', 'SynthDigits', 'MNIST-M']
+    def set_clients_bn(self, args, clientObj):
+        if args.dataset == "office":
+            train_loaders, test_loaders = prepare_data_office(args)
+            # name of each dataset
+            datasets = ['Amazon', 'Caltech', 'DSLR', 'Webcam']
+        elif args.dataset == "digits":
+            train_loaders, test_loaders = prepare_data_digits(args)
+            datasets = ['MNIST', 'SVHN', 'USPS', 'SynthDigits', 'MNIST-M']
 
         # federated setting
         client_num = len(datasets)
@@ -62,7 +66,8 @@ class FedAvg(Server):
                               )
             self.clients.append(client)
 
-    def train_bn(self):
+    def train(self):
+        avg_acc, avg_train_loss, glo_acc = [], [], []
         for i in range(self.global_rounds+1):
             self.selected_clients = self.select_clients()
             self.send_models()
@@ -70,18 +75,26 @@ class FedAvg(Server):
             if i % self.eval_gap == 0:
                 print(f"\n-------------Round number: {i}-------------")
                 print("\nEvaluate global model")
-                self.evaluate()
+                test_acc, test_num, auc = self.test_generic_metric(self.num_class, self.device, self.global_model)
+                print("Global Test Accurancy: {:.4f}".format(test_acc / test_num))
+                print("Global Test AUC: {:.4f}".format(auc))
+                avg_acc.append(test_acc / test_num)
+
+                train_loss, avg_test_acc = self.evaluate()
+                avg_train_loss.append(train_loss)
+                glo_acc.append(avg_test_acc)
 
             for client in self.selected_clients:
-                client.train_bn()
+                client.train()
 
             self.receive_models()
             self.aggregate_parameters()
 
         print("\nBest global accuracy.")
         print(max(self.rs_test_acc))
+        self.report_process(avg_acc, avg_train_loss, glo_acc)
 
-    def train(self):
+    def train_label_skew(self):
         for i in range(self.global_rounds+1):
             s_t = time.time()
             self.selected_clients = self.select_clients()

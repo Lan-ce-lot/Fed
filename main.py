@@ -17,7 +17,7 @@ from algorithms.server.serverFed import FedOurs
 from algorithms.server.serverFedavg import FedAvg
 from algorithms.server.serverFedbn import FedBN
 from algorithms.server.serverFedrod import FedROD
-from models.LeNet import LeNet, DigitModel
+from models.LeNet import LeNet, DigitModel, AlexNet
 from models.model import LocalModel, ClientOurModel
 from options import args_parser
 
@@ -38,8 +38,9 @@ def run(args):
 
     # reporter = MemReporter()
     model_str = args.model
-
-
+    rate = 1
+    if args.algorithm == "Fed":
+        rate = 1
     for i in range(args.prev, args.times):
         print(f"\n============= Running time: {i}th =============")
         print("Creating server and clients ...")
@@ -48,11 +49,13 @@ def run(args):
         # Generate args.model
         if model_str == "cnn":
             if args.dataset[:5] == "mnist" or args.dataset == "fmnist":
-                args.model = LeNet().to(args.device)
+                args.model = LeNet(rate=rate).to(args.device)
             elif args.dataset == "digits":
                 args.model = DigitModel().to(args.device)
             elif args.dataset[:5] == "Cifar":
-                args.model = DigitModel(num_classes=args.num_classes, dim=8192).to(args.device)
+                args.model = DigitModel(num_classes=args.num_classes, dim=8192, rate=rate).to(args.device)
+            elif args.dataset == "office":
+                args.model = AlexNet(rate=rate).to(args.device)
         print(args.model)
 
         # select algorithm
@@ -75,10 +78,9 @@ def run(args):
 
         else:
             raise NotImplementedError
-        if args.algorithm == "FedAvg":
-            server.train_bn()
-        else:
-            server.train()
+
+
+        server.train()
 
         time_list.append(time.time() - start)
 

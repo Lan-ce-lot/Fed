@@ -6,6 +6,10 @@ import copy
 import time
 import random
 
+from sklearn import metrics
+from sklearn.preprocessing import label_binarize
+from torch.utils.data import DataLoader
+
 from util.data_util import read_client_data
 
 
@@ -14,6 +18,7 @@ class Server(object):
         # Set up the main attributes
         self.device = args.device
         self.dataset = args.dataset
+        self.num_class = args.num_classes
         self.global_rounds = args.global_rounds
         self.local_steps = args.local_steps
         self.batch_size = args.batch_size
@@ -170,8 +175,55 @@ class Server(object):
         ids = [c.id for c in self.clients]
 
         return ids, num_samples, tot_correct, tot_auc
-    # def test_generic_metric(self, dataset, model):
+    def load_global_test_data(self, batch_size=None, dataset=None):
+        if batch_size == None:
+            batch_size = self.batch_size
+        if dataset == 'Cifar':
+            dataset = 'cifar100FL/cifar20'
+        test_data_dir = os.path.join('./dataset', dataset, 'test/')
+        test_file = test_data_dir + 'global' + '.npz'
+        with open(test_file, 'rb') as f:
+            data = np.load(f, allow_pickle=True)['data'].tolist()
 
+        X_test = torch.Tensor(data['x']).type(torch.float32)
+        y_test = torch.Tensor(data['y']).type(torch.int64)
+        test_data = [(x, y) for x, y in zip(X_test, y_test)]
+        return DataLoader(test_data, batch_size, drop_last=False, shuffle=False)
+
+    def test_generic_metric(self, num_classes, device, model):
+        test_loader_global = self.load_global_test_data(dataset=self.dataset)
+        model.eval()
+
+        test_acc = 0
+        test_num = 0
+        y_prob = []
+        y_true = []
+
+        with torch.no_grad():
+            for x, y in test_loader_global:
+                x = x.to(device)
+                y = y.to(device)
+                output = model(x)
+
+                test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
+                test_num += y.shape[0]
+
+                y_prob.append(output.detach().cpu().numpy())
+                nc = num_classes
+                if num_classes == 2:
+                    nc += 1
+                lb = label_binarize(y.detach().cpu().numpy(), classes=np.arange(nc))
+                if num_classes == 2:
+                    lb = lb[:, :2]
+                y_true.append(lb)
+
+        y_prob = np.concatenate(y_prob, axis=0)
+        y_true = np.concatenate(y_true, axis=0)
+
+        auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
+
+
+        return test_acc, test_num, auc
 
     def train_metrics(self):
         num_samples = []
@@ -212,4 +264,19 @@ class Server(object):
         print("Std Test Accurancy: {:.4f}".format(np.std(accs)))
         print("Std Test AUC: {:.4f}".format(np.std(aucs)))
 
+        return train_loss, test_acc
+
+    def report_process(self, avg_acc, avg_train_loss, glo_acc):
+        from torch.utils.tensorboard import SummaryWriter
+        from datetime import datetime
+        import os
+
+        TIMES = "{0:%Y-%m-%d--%H-%M-%S/}".format(datetime.now())
+        ori_logs = str(self.dataset) + "-" + str(self.algorithm) + TIMES
+        writer = SummaryWriter(log_dir=os.path.join('./log', ori_logs))
+        for epoch in range(len(avg_acc)):
+            writer.add_scalar("acc/avg_p_acc", avg_acc[epoch], epoch)
+            writer.add_scalar("loss/avg_p_acc", avg_train_loss[epoch], epoch)
+            writer.add_scalar("acc/g_acc", glo_acc[epoch], epoch)
+        writer.close()
 

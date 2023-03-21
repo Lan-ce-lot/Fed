@@ -61,7 +61,7 @@ class DigitsDataset(Dataset):
 
         return image, label
 
-def prepare_data(args):
+def prepare_data_digits(args):
     # Prepare data
     transform_mnist = transforms.Compose([
             transforms.Grayscale(num_output_channels=3),

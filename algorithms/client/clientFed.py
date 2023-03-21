@@ -21,16 +21,18 @@ class clientFedours(Client):
         self.p_fea = copy.deepcopy(self.model.g_fea)
         self.opt_pfea = torch.optim.SGD(self.p_fea.parameters(), lr=self.learning_rate, weight_decay=1e-5, momentum=0.9)
 
-        self.train_loader = kwargs['train_loader']
-        self.test_loader = kwargs['test_loader']
-        if args.dataset == "digits":
-            self.data_name = kwargs['data_name']
+        if self.dataset == "digits" or self.dataset == "office":
+            # self.data_name = kwargs['data_name']
+            self.train_loader = kwargs['train_loader']
+            self.test_loader = kwargs['test_loader']
         self.g_proj = kwargs['g_proj']
         self.p_proj = kwargs['p_proj']
 
     def train(self):
-        trainloader = self.train_loader
-
+        if self.dataset == "digits" or self.dataset == "office":
+            trainloader = self.train_loader
+        else:
+            trainloader = self.load_train_data()
         start_time = time.time()
 
         # self.model.to(self.device)
@@ -53,6 +55,7 @@ class clientFedours(Client):
                 g_fea = torch.mm(g_fea, g_proj)
                 p_fea = torch.mm(p_fea, p_proj)
                 fea = g_fea + p_fea
+                # fea = torch.cat([g_fea, p_fea], dim=1)
                 self.optimizer.zero_grad()
                 self.opt_pfea.zero_grad()
                 output = self.model.head(fea)
@@ -67,7 +70,10 @@ class clientFedours(Client):
         self.train_time_cost['total_cost'] += time.time() - start_time
 
     def train_metrics(self):
-        train_loader = self.train_loader
+        if self.dataset == "digits" or self.dataset == "office":
+            train_loader = self.train_loader
+        else:
+            train_loader = self.load_train_data()
         self.model.eval()
         train_acc = 0
         train_num = 0
@@ -86,17 +92,21 @@ class clientFedours(Client):
             g_fea = torch.mm(g_fea, g_proj)
             p_fea = torch.mm(p_fea, p_proj)
             fea = g_fea + p_fea
+            # fea = torch.cat([g_fea, p_fea], dim=1)
             output = self.model.head(fea)
             train_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
             train_num += y.shape[0]
             loss += self.loss(output, y).item() * y.shape[0]
 
-        print(self.id, "_trainLoss:", loss * 1.0 / train_num, end=' ')
-        print(self.id, "_trainAcc:", train_acc * 1.0 / train_num)
+        # print(self.id, "_trainLoss:", loss * 1.0 / train_num, end=' ')
+        # print(self.id, "_trainAcc:", train_acc * 1.0 / train_num)
 
         return loss, train_num
     def test_metrics(self):
-        test_loader_full = self.test_loader
+        if self.dataset == "digits" or self.dataset == "office":
+            test_loader_full = self.test_loader
+        else:
+            test_loader_full = self.load_test_data()
         self.model.eval()
 
         test_acc = 0
@@ -105,6 +115,10 @@ class clientFedours(Client):
         y_true = []
 
         with torch.no_grad():
+            # print(self.model.base)
+            # print(self.model.g_fea)
+            # print(self.p_fea)
+            # print(self.model.head)
             for x, y in test_loader_full:
                 x = x.to(self.device)
                 y = y.to(self.device)
@@ -113,9 +127,10 @@ class clientFedours(Client):
                 share_fea = self.model.base(x)
                 g_fea = self.model.g_fea(share_fea)
                 p_fea = self.p_fea(share_fea)
-                # g_fea = torch.mm(g_fea, g_proj)
-                # p_fea = torch.mm(p_fea, p_proj)
+                g_fea = torch.mm(g_fea, g_proj)
+                p_fea = torch.mm(p_fea, p_proj)
                 fea = g_fea + p_fea
+                # fea = torch.cat([g_fea, p_fea], dim=1)
                 output = self.model.head(fea)
 
                 test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
@@ -135,6 +150,6 @@ class clientFedours(Client):
         y_true = np.concatenate(y_true, axis=0)
 
         auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
-        print(self.id, "_testAcc:", test_acc * 1.0 / test_num)
+        # print(self.id, "_testAcc:", test_acc * 1.0 / test_num)
         return test_acc, test_num, auc
 
