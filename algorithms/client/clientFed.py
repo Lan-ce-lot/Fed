@@ -111,14 +111,11 @@ class clientFedours(Client):
 
         test_acc = 0
         test_num = 0
+        loss = 0
         y_prob = []
         y_true = []
 
         with torch.no_grad():
-            # print(self.model.base)
-            # print(self.model.g_fea)
-            # print(self.p_fea)
-            # print(self.model.head)
             for x, y in test_loader_full:
                 x = x.to(self.device)
                 y = y.to(self.device)
@@ -135,7 +132,7 @@ class clientFedours(Client):
 
                 test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
                 test_num += y.shape[0]
-
+                loss += self.loss(output, y).item() * y.shape[0]
                 y_prob.append(output.detach().cpu().numpy())
                 nc = self.num_classes
                 if self.num_classes == 2:
@@ -151,5 +148,5 @@ class clientFedours(Client):
 
         auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
         # print(self.id, "_testAcc:", test_acc * 1.0 / test_num)
-        return test_acc, test_num, auc
+        return test_acc, test_num, auc, loss
 

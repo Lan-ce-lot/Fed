@@ -64,6 +64,7 @@ class Client(object):
 
         test_acc = 0
         test_num = 0
+        loss = 0
         y_prob = []
         y_true = []
 
@@ -75,6 +76,7 @@ class Client(object):
 
                 test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
                 test_num += y.shape[0]
+                loss += self.loss(output, y).item() * y.shape[0]
 
                 y_prob.append(output.detach().cpu().numpy())
                 nc = self.num_classes
@@ -91,7 +93,7 @@ class Client(object):
 
         auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
 
-        return test_acc, test_num, auc
+        return test_acc, test_num, auc, loss
 
     def train_metrics(self):
         train_loader = self.load_train_data()

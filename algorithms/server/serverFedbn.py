@@ -24,6 +24,7 @@ class FedBN(Server):
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
+        self.args = args
 
         # self.load_model()
 
@@ -69,7 +70,13 @@ class FedBN(Server):
 
 
     def train(self):
-        avg_acc, avg_train_loss, glo_acc = [], [], []
+        avg_acc, avg_train_loss, glo_acc, avg_test_loss = [], [], [], []
+        train_loaders, test_loaders = None, None
+        if self.dataset == "office":
+            train_loaders, test_loaders = prepare_data_office(self.args)
+        elif self.dataset == "digits":
+            train_loaders, test_loaders = prepare_data_digits(self.args)
+
         for i in range(self.global_rounds+1):
             self.selected_clients = self.select_clients()
             self.send_models()
@@ -77,14 +84,15 @@ class FedBN(Server):
             if i % self.eval_gap == 0:
                 print(f"\n-------------Round number: {i}-------------")
                 print("\nEvaluate global model")
-                test_acc, test_num, auc = self.test_generic_metric(self.num_class, self.device, self.global_model)
+                test_acc, test_num, auc = self.test_generic_metric(self.num_class, self.device, self.global_model, test_data=test_loaders)
                 print("Global Test Accurancy: {:.4f}".format(test_acc / test_num))
                 print("Global Test AUC: {:.4f}".format(auc))
                 avg_acc.append(test_acc / test_num)
 
-                train_loss, avg_test_acc = self.evaluate()
+                train_loss, avg_test_acc, test_loss = self.evaluate()
                 avg_train_loss.append(train_loss)
                 glo_acc.append(avg_test_acc)
+                avg_test_loss.append(test_loss)
 
             for client in self.selected_clients:
                 client.train()
@@ -94,7 +102,7 @@ class FedBN(Server):
 
         print("\nBest global accuracy.")
         print(max(self.rs_test_acc))
-        self.report_process(avg_acc, avg_train_loss, glo_acc)
+        self.report_process(avg_acc, avg_train_loss, glo_acc, avg_test_loss)
 
     def train_label_skew(self):
         for i in range(self.global_rounds+1):

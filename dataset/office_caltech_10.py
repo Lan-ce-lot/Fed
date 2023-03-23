@@ -73,16 +73,16 @@ def prepare_data_office(args):
     dslr_trainset = torch.utils.data.Subset(dslr_trainset, list(range(min_data_len)))
     webcam_trainset = torch.utils.data.Subset(webcam_trainset, list(range(min_data_len)))
 
-    amazon_train_loader = torch.utils.data.DataLoader(amazon_trainset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    amazon_train_loader = torch.utils.data.DataLoader(amazon_trainset, batch_size=args.batch_size, shuffle=False, drop_last=True)
     amazon_test_loader = torch.utils.data.DataLoader(amazon_testset, batch_size=args.batch_size, shuffle=False, drop_last=True)
 
-    caltech_train_loader = torch.utils.data.DataLoader(caltech_trainset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    caltech_train_loader = torch.utils.data.DataLoader(caltech_trainset, batch_size=args.batch_size, shuffle=False, drop_last=True)
     caltech_test_loader = torch.utils.data.DataLoader(caltech_testset, batch_size=args.batch_size, shuffle=False, drop_last=True)
 
-    dslr_train_loader = torch.utils.data.DataLoader(dslr_trainset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    dslr_train_loader = torch.utils.data.DataLoader(dslr_trainset, batch_size=args.batch_size, shuffle=False, drop_last=True)
     dslr_test_loader = torch.utils.data.DataLoader(dslr_testset, batch_size=args.batch_size, shuffle=False, drop_last=True)
 
-    webcam_train_loader = torch.utils.data.DataLoader(webcam_trainset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    webcam_train_loader = torch.utils.data.DataLoader(webcam_trainset, batch_size=args.batch_size, shuffle=False, drop_last=True)
     webcam_test_loader = torch.utils.data.DataLoader(webcam_testset, batch_size=args.batch_size, shuffle=False, drop_last=True)
 
     train_loaders = [amazon_train_loader, caltech_train_loader, dslr_train_loader, webcam_train_loader]

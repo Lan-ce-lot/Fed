@@ -166,15 +166,17 @@ class Server(object):
         num_samples = []
         tot_correct = []
         tot_auc = []
+        tot_loss = []
         for c in self.clients:
-            ct, ns, auc = c.test_metrics()
+            ct, ns, auc, loss = c.test_metrics()
             tot_correct.append(ct * 1.0)
             tot_auc.append(auc * ns)
             num_samples.append(ns)
+            tot_loss.append(loss * 1.0)
 
         ids = [c.id for c in self.clients]
 
-        return ids, num_samples, tot_correct, tot_auc
+        return ids, num_samples, tot_correct, tot_auc, tot_loss
     def load_global_test_data(self, batch_size=None, dataset=None):
         if batch_size == None:
             batch_size = self.batch_size
@@ -190,37 +192,65 @@ class Server(object):
         test_data = [(x, y) for x, y in zip(X_test, y_test)]
         return DataLoader(test_data, batch_size, drop_last=False, shuffle=False)
 
-    def test_generic_metric(self, num_classes, device, model):
-        test_loader_global = self.load_global_test_data(dataset=self.dataset)
+    def test_generic_metric(self, num_classes, device, model, test_data=None):
+        if test_data == None:
+            test_loader_global = self.load_global_test_data(dataset=self.dataset)
+        else:
+            test_loader_global = test_data
         model.eval()
 
         test_acc = 0
         test_num = 0
+        loss = 0
         y_prob = []
         y_true = []
+        if isinstance(test_loader_global, list):
+            for idx in range(len(test_loader_global)):
+                with torch.no_grad():
+                    for x, y in test_loader_global[idx]:
+                        x = x.to(device)
+                        y = y.to(device)
+                        output = model(x)
 
-        with torch.no_grad():
-            for x, y in test_loader_global:
-                x = x.to(device)
-                y = y.to(device)
-                output = model(x)
+                        test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
+                        test_num += y.shape[0]
 
-                test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
-                test_num += y.shape[0]
+                        y_prob.append(output.detach().cpu().numpy())
+                        nc = num_classes
+                        if num_classes == 2:
+                            nc += 1
+                        lb = label_binarize(y.detach().cpu().numpy(), classes=np.arange(nc))
+                        if num_classes == 2:
+                            lb = lb[:, :2]
+                        y_true.append(lb)
 
-                y_prob.append(output.detach().cpu().numpy())
-                nc = num_classes
-                if num_classes == 2:
-                    nc += 1
-                lb = label_binarize(y.detach().cpu().numpy(), classes=np.arange(nc))
-                if num_classes == 2:
-                    lb = lb[:, :2]
-                y_true.append(lb)
+            y_prob = np.concatenate(y_prob, axis=0)
+            y_true = np.concatenate(y_true, axis=0)
 
-        y_prob = np.concatenate(y_prob, axis=0)
-        y_true = np.concatenate(y_true, axis=0)
+            auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
+        else:
+            with torch.no_grad():
+                for x, y in test_loader_global:
+                    x = x.to(device)
+                    y = y.to(device)
+                    output = model(x)
 
-        auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
+                    test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
+                    test_num += y.shape[0]
+
+                    y_prob.append(output.detach().cpu().numpy())
+                    nc = num_classes
+                    if num_classes == 2:
+                        nc += 1
+                    lb = label_binarize(y.detach().cpu().numpy(), classes=np.arange(nc))
+                    if num_classes == 2:
+                        lb = lb[:, :2]
+                    y_true.append(lb)
+
+            y_prob = np.concatenate(y_prob, axis=0)
+            y_true = np.concatenate(y_true, axis=0)
+
+            auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
 
 
         return test_acc, test_num, auc
@@ -244,6 +274,7 @@ class Server(object):
 
         test_acc = sum(stats[2]) * 1.0 / sum(stats[1])
         test_auc = sum(stats[3]) * 1.0 / sum(stats[1])
+        test_loss = sum(stats[4]) * 1.0 / sum(stats[1])
         train_loss = sum(stats_train[2]) * 1.0 / sum(stats_train[1])
         accs = [a / n for a, n in zip(stats[2], stats[1])]
         aucs = [a / n for a, n in zip(stats[3], stats[1])]
@@ -259,14 +290,15 @@ class Server(object):
             loss.append(train_loss)
 
         print("Averaged Train Loss: {:.4f}".format(train_loss))
+        print("Averaged Test Loss: {:.4f}".format(test_loss))
         print("Averaged Test Accurancy: {:.4f}".format(test_acc))
         print("Averaged Test AUC: {:.4f}".format(test_auc))
         print("Std Test Accurancy: {:.4f}".format(np.std(accs)))
         print("Std Test AUC: {:.4f}".format(np.std(aucs)))
 
-        return train_loss, test_acc
+        return train_loss, test_acc, test_loss
 
-    def report_process(self, avg_acc, avg_train_loss, glo_acc):
+    def report_process(self, avg_acc, avg_train_loss, glo_acc, avg_test_loss, ):
         from torch.utils.tensorboard import SummaryWriter
         from datetime import datetime
         import os
@@ -276,7 +308,8 @@ class Server(object):
         writer = SummaryWriter(log_dir=os.path.join('./log', ori_logs))
         for epoch in range(len(avg_acc)):
             writer.add_scalar("acc/avg_p_acc", avg_acc[epoch], epoch)
-            writer.add_scalar("loss/avg_p_acc", avg_train_loss[epoch], epoch)
+            writer.add_scalar("loss/avg_train_loss", avg_train_loss[epoch], epoch)
+            writer.add_scalar("loss/avg_test_loss", avg_test_loss[epoch], epoch)
             writer.add_scalar("acc/g_acc", glo_acc[epoch], epoch)
         writer.close()
 

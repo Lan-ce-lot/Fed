@@ -29,6 +29,7 @@ class FedOurs(Server):
         print("Finished creating server and clients.")
 
         self.Budget = []
+        self.args = args
     def set_clients(self, args, clientObj):
         for i in range(self.num_clients):
             train_data = read_client_data(self.dataset, i, is_train=True)
@@ -86,7 +87,12 @@ class FedOurs(Server):
             self.clients.append(client)
 
     def train(self):
-        avg_acc, avg_train_loss, glo_acc = [], [], []
+        avg_acc, avg_train_loss, glo_acc, avg_test_loss = [], [], [], []
+        train_loaders, test_loaders = None, None
+        if self.dataset == "office":
+            train_loaders, test_loaders = prepare_data_office(self.args)
+        elif self.dataset == "digits":
+            train_loaders, test_loaders = prepare_data_digits(self.args)
 
         for i in range(self.global_rounds+1):
             s_t = time.time()
@@ -96,14 +102,15 @@ class FedOurs(Server):
             if i % self.eval_gap == 0:
                 print(f"\n-------------Round number: {i}-------------")
                 print("\nEvaluate global model")
-                test_acc, test_num, auc = self.test_generic_metric(self.num_class, self.device, self.global_model)
+                test_acc, test_num, auc = self.test_generic_metric(self.num_class, self.device, self.global_model, test_data=test_loaders)
                 print("Global Test Accurancy: {:.4f}".format(test_acc / test_num))
                 print("Global Test AUC: {:.4f}".format(auc))
                 avg_acc.append(test_acc / test_num)
 
-                train_loss, avg_test_acc = self.evaluate()
+                train_loss, avg_test_acc, test_loss = self.evaluate()
                 avg_train_loss.append(train_loss)
                 glo_acc.append(avg_test_acc)
+                avg_test_loss.append(test_loss)
 
             for client in self.selected_clients:
                 client.train()
@@ -119,7 +126,7 @@ class FedOurs(Server):
         print(max(self.rs_test_acc))
         print("\nAverage time cost per round.")
         print(sum(self.Budget[1:])/len(self.Budget[1:]))
-        self.report_process(avg_acc, avg_train_loss, glo_acc)
+        self.report_process(avg_acc, avg_train_loss, glo_acc, avg_test_loss)
 
         # self.save_results()
         # self.save_global_model()

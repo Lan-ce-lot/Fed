@@ -83,6 +83,7 @@ class clientFedbn(Client):
 
         test_acc = 0
         test_num = 0
+        loss = 0
         y_prob = []
         y_true = []
 
@@ -94,7 +95,7 @@ class clientFedbn(Client):
 
                 test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
                 test_num += y.shape[0]
-
+                loss += self.loss(output, y).item() * y.shape[0]
                 y_prob.append(output.detach().cpu().numpy())
                 nc = self.num_classes
                 if self.num_classes == 2:
@@ -110,7 +111,7 @@ class clientFedbn(Client):
 
         auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
         # print(self.id, "_testAcc:", test_acc * 1.0 / test_num)
-        return test_acc, test_num, auc
+        return test_acc, test_num, auc, loss
 
     def train_label_skew(self):
         trainloader = self.load_train_data()
